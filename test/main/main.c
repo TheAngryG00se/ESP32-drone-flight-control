@@ -39,7 +39,7 @@ static char tag[] = "mpu6050";
 #define ESP_ERROR_CHECK(x)   do { esp_err_t rc = (x); if (rc != ESP_OK) { ESP_LOGE("err", "esp_err_t = %d", rc); assert(0 && #x);} } while(0);
 
 void task_mpu6050(void *ignore) {
-	
+
 	ESP_LOGD(tag, ">> mpu6050");
 	i2c_config_t conf;
 	conf.mode = I2C_MODE_MASTER;
@@ -49,9 +49,9 @@ void task_mpu6050(void *ignore) {
 	conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
 	conf.master.clk_speed = 100000;
     printf("negri\n");
-	ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &conf)); 
-	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0)); 
-    printf("neogk\n");
+	ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &conf)); //programm fails on this assert
+	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0)); //if above assert is removed, failed on this
+    printf("nief\n");
 
 	i2c_cmd_handle_t cmd;
 	vTaskDelay(200/portTICK_PERIOD_MS);
@@ -80,10 +80,12 @@ void task_mpu6050(void *ignore) {
 	short accel_y;
 	short accel_z;
 
+	//my variables:
     int acc_avg_x = 0;
     int acc_avg_y = 0;
     int acc_avg_z = 0;
     short i = 0;
+	//
 
     while(1) {
 		// Tell the MPU6050 to position the internal register pointer to register
@@ -115,9 +117,8 @@ void task_mpu6050(void *ignore) {
 		accel_x = (data[0] << 8) | data[1];
 		accel_y = (data[2] << 8) | data[3];
 		accel_z = (data[4] << 8) | data[5];
-        ESP_LOGD(tag, "raw accel x, y, z: %d, %d, %d", accel_x, accel_y, accel_z);
 
-
+		//my code
         if(i < 10){
             acc_avg_x += accel_x;
             acc_avg_y += accel_y;
@@ -129,13 +130,14 @@ void task_mpu6050(void *ignore) {
 				acc_avg_z /= 10;
 				
             }
-			ESP_LOGD(tag, "raw accel x, y, z: %d, %d, %d", accel_x, accel_y, accel_z);
             i++;
         }
         else{
             ESP_LOGD(tag, "calibrated accel x, y, z: %d %d %d", acc_avg_x - accel_x, acc_avg_y - accel_y, acc_avg_z - accel_z);
         }
+		//
 
+        ESP_LOGD(tag, "raw accel x, y, z: %d, %d, %d", accel_x, accel_y, accel_z);
 
 		vTaskDelay(500/portTICK_PERIOD_MS);
 	}
