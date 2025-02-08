@@ -1,0 +1,41 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "gdbtarget",
+            "request": "attach",
+            "name": "Eclipse CDT GDB Adapter"
+        },
+        {
+            "type": "espidf",
+            "name": "Launch",
+            "request": "launch"
+        },
+        {
+            "name": "C/C++: xtensa-esp32-elf-gcc сборка и отладка активного файла",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${fileDirname}/${fileBasenameNoExtension}",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${fileDirname}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Включить автоматическое форматирование для gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Задать для варианта приложения дизассемблирования значение Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "C/C++: xtensa-esp32-elf-gcc сборка активного файла",
+            "miDebuggerPath": "gdb"
+        }
+    ]
+}
