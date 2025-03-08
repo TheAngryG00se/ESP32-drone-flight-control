@@ -1,1 +1,5 @@
 test/build
+/bmp280_test/build
+/motor_test/build
+/mpu6050_test/build
+/server/build

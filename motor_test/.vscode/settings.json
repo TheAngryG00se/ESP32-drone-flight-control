@@ -1,0 +1,13 @@
+{
+    "idf.flashType": "UART",
+    "idf.port": "/dev/ttyUSB0",
+    "files.associations": {
+        "gpio.h": "c",
+        "esp_log.h": "c",
+        "stdint.h": "c",
+        "stdarg.h": "c",
+        "freertos.h": "c",
+        "task.h": "c",
+        "freertosconfig.h": "c"
+    }
+}
