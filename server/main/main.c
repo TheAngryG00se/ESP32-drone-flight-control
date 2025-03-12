@@ -37,6 +37,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "sensors.h"
+
 #define EXAMPLE_HTTP_QUERY_KEY_MAX_LEN  (64)
 
 /* A simple example that demonstrates how to create GET and POST
@@ -44,6 +46,8 @@
  */
 
 static const char *TAG = "example";
+
+double fullfilment = 0;
 
 #if CONFIG_EXAMPLE_BASIC_AUTH
 
@@ -259,7 +263,7 @@ static esp_err_t hello_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-char msg[100] = "";
+char msg[300] = "";
 static httpd_uri_t hello = {
     .uri       = "/hello",
     .method    = HTTP_GET,
@@ -401,6 +405,52 @@ static const httpd_uri_t ctrl = {
     .user_ctx  = NULL
 };
 
+
+/* my custom handler */
+static esp_err_t control_post_handler(httpd_req_t *req)
+{
+    char buf[100];
+    int ret, remaining = req->content_len;
+
+    while (remaining > 0) {
+        /* Read the data for the request */
+        if ((ret = httpd_req_recv(req, buf,
+                        MIN(remaining, sizeof(buf)))) <= 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+                /* Retry receiving if timeout occurred */
+                continue;
+            }
+            return ESP_FAIL;
+        }
+
+        /* Send back the same data */
+        httpd_resp_send_chunk(req, buf, ret);
+        remaining -= ret;
+        
+        float tmp = fullfilment;
+        if(sscanf(buf, "%lf", &fullfilment) != 1){
+            fullfilment = tmp;
+        }
+
+        /* Log data received */
+        ESP_LOGI(TAG, "=========== RECEIVED DATA ==========");
+        ESP_LOGI(TAG, "%lf", fullfilment);
+        ESP_LOGI(TAG, "%.*s", ret, buf);
+        ESP_LOGI(TAG, "====================================");
+    }
+
+    // End response
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+static const httpd_uri_t control = {
+    .uri       = "/control",
+    .method    = HTTP_POST,
+    .handler   = control_post_handler,
+    .user_ctx  = NULL
+};
+
 static httpd_handle_t start_webserver(void)
 {
     httpd_handle_t server = NULL;
@@ -423,6 +473,7 @@ static httpd_handle_t start_webserver(void)
         httpd_register_uri_handler(server, &echo);
         httpd_register_uri_handler(server, &ctrl);
         httpd_register_uri_handler(server, &any);
+        httpd_register_uri_handler(server, &control);
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
         #endif
@@ -469,21 +520,23 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
-#define LEDC_OUTPUT_IO          (32) // GPIO для вывода PWM
-#define LEDC_CHANNEL            LEDC_CHANNEL_0
+// #define LEDC_OUTPUT_IO          (13) // GPIO для вывода PWM
+// #define LEDC_CHANNEL            LEDC_CHANNEL_0
 #define LEDC_DUTY_RES           LEDC_TIMER_13_BIT // Разрешение ШИМ
 #define LEDC_FREQUENCY          (50) // Частота ШИМ в Гц (стандартная для ESC)
 
 static const char *TAG_MOTOR = "BLDC_MOTOR_CONTROL";
 
 // Функция для установки duty cycle в микросекундах
-void set_duty_microseconds(uint32_t duty_us) {
+void set_duty_microseconds(ledc_channel_config_t* motor_channel, char* buf, float duty_us) {
     // Преобразуем микросекунды в значение duty cycle
     uint32_t max_duty = (1 << LEDC_DUTY_RES) - 1; // Максимальное значение duty cycle
     uint32_t duty = (duty_us * LEDC_FREQUENCY * max_duty) / 1000000;
-    // printf("max: %ld, current: %ld\n", max_duty, duty);
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, duty));
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
+
+    snprintf(buf, 100, "motor on pin %d duty: %ld", motor_channel->gpio_num, duty);
+    // ESP_LOGI(TAG_MOTOR, "max: %ld, current: %ld\n", max_duty, duty);
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, motor_channel->channel, duty));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, motor_channel->channel));
 }
 
 
@@ -528,38 +581,83 @@ void app_main()
         .freq_hz          = LEDC_FREQUENCY,
         .clk_cfg          = LEDC_AUTO_CLK
     };
+
+    const int motor_count = 4;
+    ledc_channel_t motor_ledc_channel_number[4] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
+    size_t gpio_motor_channel[4] = {4, 32, 13, 15};
+    
+    ledc_channel_config_t ledc_motor_channel[4] = {};
+    for(int i = 0; i < motor_count; ++i){
+        ledc_motor_channel[i].speed_mode     = LEDC_MODE;
+        ledc_motor_channel[i].channel        = motor_ledc_channel_number[i];
+        ledc_motor_channel[i].timer_sel      = LEDC_TIMER;
+        ledc_motor_channel[i].intr_type      = LEDC_INTR_DISABLE;
+        ledc_motor_channel[i].gpio_num       = gpio_motor_channel[i];
+        ledc_motor_channel[i].duty           = 0; // Начальная скважность
+        ledc_motor_channel[i].hpoint         = 0;
+    }
+
     ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
-    // Настройка канала ШИМ
-    ledc_channel_config_t ledc_channel = {
-        .speed_mode     = LEDC_MODE,
-        .channel        = LEDC_CHANNEL,
-        .timer_sel      = LEDC_TIMER,
-        .intr_type      = LEDC_INTR_DISABLE,
-        .gpio_num       = LEDC_OUTPUT_IO,
-        .duty           = 0, // Начальная скважность
-        .hpoint         = 0
-    };
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
+    for(int i = 0; i < motor_count; ++i){
+        ESP_ERROR_CHECK(ledc_channel_config(&ledc_motor_channel[i]));
+    }
+    vTaskDelay(pdMS_TO_TICKS(250));
+    
+    float min_period = 1000;
+    float max_period = 2000; //max period in us
 
-    // Инициализация ESC (отправка max сигнала на 2 секунды)
+    char ret_mpu[100];
+    char ret_bmp[100];
+    char ret_duty[100];
+
     ESP_LOGI(TAG_MOTOR, "Initializing ESC...");
-    uint16_t max_fullf = 2000;
-    set_duty_microseconds(max_fullf); // 1000 мкс (минимальная скорость)
-    vTaskDelay(pdMS_TO_TICKS(1000)); // Ждем 2 секунды
+    // Инициализация ESC (отправка min и max сигнала на секунду)
+    for(int i = 0; i < motor_count; i++){
+        set_duty_microseconds(&ledc_motor_channel[i], ret_duty, min_period); // 1000 мкс (минимальная скорость)
+    }
+    vTaskDelay(pdMS_TO_TICKS(1000)); //ждем секунду
 
-    // Инициализация ESC (отправка min сигнала на 2 секунды)
-    ESP_LOGI(TAG_MOTOR, "Initializing ESC...");
-    uint16_t min_fullf = 1000;
-    set_duty_microseconds(min_fullf); // 1000 мкс (минимальная скорость)
-    vTaskDelay(pdMS_TO_TICKS(1000)); // Ждем 2 секунды
+    for(int i = 0; i < motor_count; i++){
+        set_duty_microseconds(&ledc_motor_channel[i], ret_duty, max_period); // 2000 мкс (максимальная скорость)
+    }
+    vTaskDelay(pdMS_TO_TICKS(1000)); //ждем секунду
 
-    int i = 0;
+    // Initialize I2C
+    esp_err_t ret = i2c_master_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "I2C initialization failed");
+        return;
+    }
+
+    // Initialize BMP280
+    bmp280_init();
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    bmp280_read_calibration_data();
+    // Initialize MPU6050
+    mpu6050_init();
+
     while (server) {
-        i = (i + 1) % ((max_fullf-min_fullf)/25);
-        uint32_t duty_percent = min_fullf + i*25;
-        sprintf(hello.user_ctx, "oboroty: %lu\n", duty_percent);
-        set_duty_microseconds(duty_percent);
+        // i = (i + 1) % ((max_fullf-min_fullf)/25);
+        float duty_percent = min_period*(1 + fullfilment/100);
+        for(int i = 0; i < motor_count; ++i){
+            set_duty_microseconds(&ledc_motor_channel[i], ret_duty, duty_percent);
+        }
+        
+        // Read data from BMP280
+        bmp280_read_data(ret_bmp);
+
+        // Read data from MPU6050
+        mpu6050_read_data(ret_mpu);
+
+        snprintf(hello.user_ctx, 100, "oboroty: %0.4f\n", duty_percent);
+        strcat(hello.user_ctx, ret_bmp);
+        strcat(hello.user_ctx, ret_mpu);
+        strcat(hello.user_ctx, ret_duty);
+
+
+
+        // Delay for 1 second
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
