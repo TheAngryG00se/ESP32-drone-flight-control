@@ -178,6 +178,7 @@ static void httpd_register_basic_auth(httpd_handle_t server)
 }
 #endif
 
+char msg[1200] = {};
 /* An HTTP GET handler */
 static esp_err_t hello_get_handler(httpd_req_t *req)
 {
@@ -260,10 +261,12 @@ static esp_err_t hello_get_handler(httpd_req_t *req)
     if (httpd_req_get_hdr_value_len(req, "Host") == 0) {
         ESP_LOGI(TAG, "Request headers lost");
     }
+
+    memset(msg, 0, 1200);
+    ESP_LOGI(TAG, "FREED: %s", msg);
     return ESP_OK;
 }
 
-char msg[300] = "";
 static httpd_uri_t hello = {
     .uri       = "/hello",
     .method    = HTTP_GET,
@@ -525,6 +528,8 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 #define LEDC_DUTY_RES           LEDC_TIMER_13_BIT // Разрешение ШИМ
 #define LEDC_FREQUENCY          (50) // Частота ШИМ в Гц (стандартная для ESC)
 
+#define MOTOR_COUNT 4
+
 static const char *TAG_MOTOR = "BLDC_MOTOR_CONTROL";
 
 // Функция для установки duty cycle в микросекундах
@@ -532,13 +537,34 @@ void set_duty_microseconds(ledc_channel_config_t* motor_channel, char* buf, floa
     // Преобразуем микросекунды в значение duty cycle
     uint32_t max_duty = (1 << LEDC_DUTY_RES) - 1; // Максимальное значение duty cycle
     uint32_t duty = (duty_us * LEDC_FREQUENCY * max_duty) / 1000000;
+    char small_msg[100] = {};
 
-    snprintf(buf, 100, "motor on pin %d duty: %ld", motor_channel->gpio_num, duty);
+    snprintf(small_msg, 100, "motor on pin %d duty: %ld\n", motor_channel->gpio_num, duty);
+    ESP_LOGI(TAG_MOTOR, "%s", small_msg);
+    strncat(buf, small_msg, 100);
+
     // ESP_LOGI(TAG_MOTOR, "max: %ld, current: %ld\n", max_duty, duty);
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, motor_channel->channel, duty));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, motor_channel->channel));
 }
 
+
+static SemaphoreHandle_t ba_semaphore;
+
+// Custom log output function
+int custom_log_vprintf(const char *fmt, va_list args) {
+    char log_msg[256];
+    vsnprintf(log_msg, sizeof(log_msg), fmt, args);
+
+    // Check if the log contains "<ba-add>"
+    if (strstr(log_msg, "<ba-add>") != NULL) {
+        // Release the semaphore
+        xSemaphoreGive(ba_semaphore);
+    }
+
+    // Forward the log to the default output
+    return vprintf(fmt, args);
+}
 
 void app_main()
 {
@@ -559,7 +585,7 @@ void app_main()
      */
 #if !CONFIG_IDF_TARGET_LINUX
 #ifdef CONFIG_EXAMPLE_CONNECT_WIFI
-    printf("bebra wifi\n");
+    printf("bebra wifi\n"); 
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &connect_handler, &server));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &disconnect_handler, &server));
 #endif // CONFIG_EXAMPLE_CONNECT_WIFI
@@ -573,6 +599,19 @@ void app_main()
     /* Start the server for the first time */
     server = start_webserver();
 
+    // Create a binary semaphore
+    ba_semaphore = xSemaphoreCreateBinary();
+
+    // Set the custom log output function
+    esp_log_set_vprintf(custom_log_vprintf);
+
+    // Initialize Wi-Fi and connect (as shown in the previous example)
+
+    // Wait for the <ba-add> event
+    if (xSemaphoreTake(ba_semaphore, portMAX_DELAY) == pdTRUE) {
+        ESP_LOGI("main", "Detected <ba-add> event, continuing execution");
+    }
+
     // Настройка таймера ШИМ
     ledc_timer_config_t ledc_timer = {
         .speed_mode       = LEDC_MODE,
@@ -582,12 +621,12 @@ void app_main()
         .clk_cfg          = LEDC_AUTO_CLK
     };
 
-    const int motor_count = 4;
-    ledc_channel_t motor_ledc_channel_number[4] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
-    size_t gpio_motor_channel[4] = {4, 32, 13, 15};
-    
-    ledc_channel_config_t ledc_motor_channel[4] = {};
-    for(int i = 0; i < motor_count; ++i){
+    ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
+    size_t gpio_motor_channel[MOTOR_COUNT] = {4, 32, 13, 15};
+
+    ledc_channel_config_t ledc_motor_channel[MOTOR_COUNT] = {};
+
+    for(int i = 0; i < MOTOR_COUNT; ++i){
         ledc_motor_channel[i].speed_mode     = LEDC_MODE;
         ledc_motor_channel[i].channel        = motor_ledc_channel_number[i];
         ledc_motor_channel[i].timer_sel      = LEDC_TIMER;
@@ -599,29 +638,28 @@ void app_main()
 
     ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
-    for(int i = 0; i < motor_count; ++i){
+    for(int i = 0; i < MOTOR_COUNT; ++i){
         ESP_ERROR_CHECK(ledc_channel_config(&ledc_motor_channel[i]));
     }
-    vTaskDelay(pdMS_TO_TICKS(250));
     
     float min_period = 1000;
     float max_period = 2000; //max period in us
 
     char ret_mpu[100];
     char ret_bmp[100];
-    char ret_duty[100];
+    char ret_duty[1000];
 
     ESP_LOGI(TAG_MOTOR, "Initializing ESC...");
     // Инициализация ESC (отправка min и max сигнала на секунду)
-    for(int i = 0; i < motor_count; i++){
+    for(int i = 0; i < MOTOR_COUNT; i++){
         set_duty_microseconds(&ledc_motor_channel[i], ret_duty, min_period); // 1000 мкс (минимальная скорость)
     }
-    vTaskDelay(pdMS_TO_TICKS(1000)); //ждем секунду
+    vTaskDelay(pdMS_TO_TICKS(2000)); //ждем секунду
 
-    for(int i = 0; i < motor_count; i++){
-        set_duty_microseconds(&ledc_motor_channel[i], ret_duty, max_period); // 2000 мкс (максимальная скорость)
+    for(int defenitly_not_used_variable_name = 0; defenitly_not_used_variable_name < MOTOR_COUNT; defenitly_not_used_variable_name++){
+        set_duty_microseconds(&(ledc_motor_channel[defenitly_not_used_variable_name]), ret_duty, max_period); // 2000 мкс (максимальная скорость)
     }
-    vTaskDelay(pdMS_TO_TICKS(1000)); //ждем секунду
+    vTaskDelay(pdMS_TO_TICKS(2000)); //ждем секунду
 
     // Initialize I2C
     esp_err_t ret = i2c_master_init();
@@ -637,11 +675,19 @@ void app_main()
     // Initialize MPU6050
     mpu6050_init();
 
+    fullfilment = 100;
+    float prev_fulfillment = 100;
+    float duty_ms = min_period*(1 + fullfilment/100);
+
     while (server) {
         // i = (i + 1) % ((max_fullf-min_fullf)/25);
-        float duty_percent = min_period*(1 + fullfilment/100);
-        for(int i = 0; i < motor_count; ++i){
-            set_duty_microseconds(&ledc_motor_channel[i], ret_duty, duty_percent);
+        if(prev_fulfillment != fullfilment){
+            duty_ms = min_period*(1 + fullfilment/100);
+            prev_fulfillment = fullfilment;
+            memset(ret_duty, 0, 1000);
+            for(int i = 0; i < MOTOR_COUNT; ++i){
+                set_duty_microseconds(&ledc_motor_channel[i], ret_duty, duty_ms);
+            }
         }
         
         // Read data from BMP280
@@ -650,9 +696,9 @@ void app_main()
         // Read data from MPU6050
         mpu6050_read_data(ret_mpu);
 
-        snprintf(hello.user_ctx, 100, "oboroty: %0.4f\n", duty_percent);
-        strcat(hello.user_ctx, ret_bmp);
-        strcat(hello.user_ctx, ret_mpu);
+        snprintf(hello.user_ctx, 100, "oboroty: %0.4f\n", duty_ms);
+        // strcat(hello.user_ctx, ret_bmp);
+        // strcat(hello.user_ctx, ret_mpu);
         strcat(hello.user_ctx, ret_duty);
 
 

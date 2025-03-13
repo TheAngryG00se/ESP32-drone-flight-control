@@ -168,7 +168,7 @@ void calculate_euler_angles(int16_t ax, int16_t ay, int16_t az, int16_t gx, int1
 
     // ESP_LOGI(TAG, "MPU6050 - Raw Accel: X=%d, Y=%d, Z=%d, Raw Gyro: X=%d, Y=%d, Z=%d", ax, ay, az, gx, gy, gz);
     // ESP_LOGI(TAG, "MPU6050 - Roll: %.2f°, Pitch: %.2f°, Yaw: %.2f°", roll, pitch, gyro_z);
-    sprintf(msg, "MPU6050 - Roll: %.2f°, Pitch: %.2f°, Yaw: %.2f°", roll, pitch, gyro_z);
+    sprintf(msg, "MPU6050 - Roll: %.2f°, Pitch: %.2f°, Yaw: %.2f°\n", roll, pitch, gyro_z);
 }
 
 // Function to read data from MPU6050
