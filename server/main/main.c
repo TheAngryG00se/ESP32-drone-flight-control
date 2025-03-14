@@ -528,7 +528,7 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 #define LEDC_DUTY_RES           LEDC_TIMER_13_BIT // Разрешение ШИМ
 #define LEDC_FREQUENCY          (50) // Частота ШИМ в Гц (стандартная для ESC)
 
-#define MOTOR_COUNT 4
+#define MOTOR_COUNT 1
 
 static const char *TAG_MOTOR = "BLDC_MOTOR_CONTROL";
 
@@ -598,19 +598,20 @@ void app_main()
 
     /* Start the server for the first time */
     server = start_webserver();
-
-    // Create a binary semaphore
-    ba_semaphore = xSemaphoreCreateBinary();
-
-    // Set the custom log output function
-    esp_log_set_vprintf(custom_log_vprintf);
-
     // Initialize Wi-Fi and connect (as shown in the previous example)
 
+
+    // Create a binary semaphore
+    // ba_semaphore = xSemaphoreCreateBinary();
+
+    // Set the custom log output function
+    // esp_log_set_vprintf(custom_log_vprintf);
+
+
     // Wait for the <ba-add> event
-    if (xSemaphoreTake(ba_semaphore, portMAX_DELAY) == pdTRUE) {
-        ESP_LOGI("main", "Detected <ba-add> event, continuing execution");
-    }
+    // if (xSemaphoreTake(ba_semaphore, portMAX_DELAY) == pdTRUE) {
+    //     ESP_LOGI("main", "Detected <ba-add> event, continuing execution");
+    // }
 
     // Настройка таймера ШИМ
     ledc_timer_config_t ledc_timer = {
@@ -621,8 +622,8 @@ void app_main()
         .clk_cfg          = LEDC_AUTO_CLK
     };
 
-    ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
-    size_t gpio_motor_channel[MOTOR_COUNT] = {4, 32, 13, 15};
+    ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0}; //, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
+    size_t gpio_motor_channel[MOTOR_COUNT] = {4}; //13, 32, 4, 15};
 
     ledc_channel_config_t ledc_motor_channel[MOTOR_COUNT] = {};
 
@@ -643,7 +644,7 @@ void app_main()
     }
     
     float min_period = 1000;
-    float max_period = 2000; //max period in us
+    float max_period = 1500; //max period in us
 
     char ret_mpu[100];
     char ret_bmp[100];
@@ -675,14 +676,13 @@ void app_main()
     // Initialize MPU6050
     mpu6050_init();
 
-    fullfilment = 100;
+    fullfilment = 0;
     float prev_fulfillment = 100;
-    float duty_ms = min_period*(1 + fullfilment/100);
+    float duty_ms = 0;
 
     while (server) {
-        // i = (i + 1) % ((max_fullf-min_fullf)/25);
         if(prev_fulfillment != fullfilment){
-            duty_ms = min_period*(1 + fullfilment/100);
+            duty_ms = min_period*(1 + (max_period/min_period - 1)*(fullfilment/100));
             prev_fulfillment = fullfilment;
             memset(ret_duty, 0, 1000);
             for(int i = 0; i < MOTOR_COUNT; ++i){
