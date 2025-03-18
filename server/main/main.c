@@ -519,7 +519,8 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 }
 #endif // !CONFIG_IDF_TARGET_LINUX
 
-
+#define BMP 0
+#define MPU 0
 
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
@@ -528,7 +529,7 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 #define LEDC_DUTY_RES           LEDC_TIMER_13_BIT // Разрешение ШИМ
 #define LEDC_FREQUENCY          (50) // Частота ШИМ в Гц (стандартная для ESC)
 
-#define MOTOR_COUNT 1
+#define MOTOR_COUNT 4
 
 static const char *TAG_MOTOR = "BLDC_MOTOR_CONTROL";
 
@@ -622,8 +623,8 @@ void app_main()
         .clk_cfg          = LEDC_AUTO_CLK
     };
 
-    ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0}; //, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
-    size_t gpio_motor_channel[MOTOR_COUNT] = {4}; //13, 32, 4, 15};
+    ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
+    size_t gpio_motor_channel[MOTOR_COUNT] = {32, 4, 15, 13}; //{13, 32, 4, 15};
 
     ledc_channel_config_t ledc_motor_channel[MOTOR_COUNT] = {};
 
@@ -670,11 +671,16 @@ void app_main()
     }
 
     // Initialize BMP280
+    #if BMP
     bmp280_init();
     vTaskDelay(100 / portTICK_PERIOD_MS);
     bmp280_read_calibration_data();
+    #endif
+
+    #if MPU
     // Initialize MPU6050
     mpu6050_init();
+    #endif
 
     fullfilment = 0;
     float prev_fulfillment = 100;
@@ -691,16 +697,20 @@ void app_main()
         }
         
         // Read data from BMP280
+        #if BMP
         bmp280_read_data(ret_bmp);
+        strcat(hello.user_ctx, ret_bmp);
+        #endif
 
+        #if MPU
         // Read data from MPU6050
         mpu6050_read_data(ret_mpu);
+        strcat(hello.user_ctx, ret_mpu);
+        #endif
+
 
         snprintf(hello.user_ctx, 100, "oboroty: %0.4f\n", duty_ms);
-        // strcat(hello.user_ctx, ret_bmp);
-        // strcat(hello.user_ctx, ret_mpu);
         strcat(hello.user_ctx, ret_duty);
-
 
 
         // Delay for 1 second

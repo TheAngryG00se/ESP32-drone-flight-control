@@ -6,6 +6,8 @@ import asyncio
 import struct
 
 ip = "192.168.50.147:80"
+# ip = "192.168.50.61:80"
+
 header = "/control"
 
 value = 0
