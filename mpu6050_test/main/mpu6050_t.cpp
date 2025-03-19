@@ -33,6 +33,7 @@ void task_initI2C(void *ignore) {
 
 
 void task_display(void*){
+
 	printf("\nIN MPU\n");
 	MPU6050 mpu = MPU6050();
 	mpu.initialize();
@@ -49,8 +50,11 @@ void task_display(void*){
 
 	mpu.setDMPEnabled(true);
 
-	// while(1)
-	for(int i = 0; i < 100; i++)
+	printf("Calibrating MPU done.\n");
+	printf("ID: %u\n", mpu.getDeviceID());
+
+	while(1)
+	// for(int i = 0; i  -1; i++)
 	{
 	    mpuIntStatus = mpu.getIntStatus();
 		// get current FIFO count
