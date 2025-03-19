@@ -7,6 +7,7 @@
    CONDITIONS OF ANY KIND, either express or implied.
 */
 
+///server///
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -23,14 +24,15 @@
 #include "esp_tls.h"
 #include "esp_check.h"
 
-
 #if !CONFIG_IDF_TARGET_LINUX
 #include <esp_wifi.h>
 #include <esp_system.h>
 #include "nvs_flash.h"
 #include "esp_eth.h"
 #endif  // !CONFIG_IDF_TARGET_LINUX
+///!server///
 
+///motors///
 #include <stdio.h>
 #include "driver/ledc.h"
 #include "esp_err.h"
@@ -189,7 +191,7 @@ static esp_err_t hello_get_handler(httpd_req_t *req)
      * extra byte for null termination */
     buf_len = httpd_req_get_hdr_value_len(req, "Host") + 1;
     if (buf_len > 1) {
-        buf = malloc(buf_len);
+        buf = (char*) malloc(buf_len);
         ESP_RETURN_ON_FALSE(buf, ESP_ERR_NO_MEM, TAG, "buffer alloc failed");
         /* Copy null terminated value string into buffer */
         if (httpd_req_get_hdr_value_str(req, "Host", buf, buf_len) == ESP_OK) {
@@ -200,7 +202,7 @@ static esp_err_t hello_get_handler(httpd_req_t *req)
 
     buf_len = httpd_req_get_hdr_value_len(req, "Test-Header-2") + 1;
     if (buf_len > 1) {
-        buf = malloc(buf_len);
+        buf = (char*) malloc(buf_len);
         ESP_RETURN_ON_FALSE(buf, ESP_ERR_NO_MEM, TAG, "buffer alloc failed");
         if (httpd_req_get_hdr_value_str(req, "Test-Header-2", buf, buf_len) == ESP_OK) {
             ESP_LOGI(TAG, "Found header => Test-Header-2: %s", buf);
@@ -210,7 +212,7 @@ static esp_err_t hello_get_handler(httpd_req_t *req)
 
     buf_len = httpd_req_get_hdr_value_len(req, "Test-Header-1") + 1;
     if (buf_len > 1) {
-        buf = malloc(buf_len);
+        buf = (char*) malloc(buf_len);
         ESP_RETURN_ON_FALSE(buf, ESP_ERR_NO_MEM, TAG, "buffer alloc failed");
         if (httpd_req_get_hdr_value_str(req, "Test-Header-1", buf, buf_len) == ESP_OK) {
             ESP_LOGI(TAG, "Found header => Test-Header-1: %s", buf);
@@ -222,7 +224,7 @@ static esp_err_t hello_get_handler(httpd_req_t *req)
      * extra byte for null termination */
     buf_len = httpd_req_get_url_query_len(req) + 1;
     if (buf_len > 1) {
-        buf = malloc(buf_len);
+        buf = (char*) malloc(buf_len);
         ESP_RETURN_ON_FALSE(buf, ESP_ERR_NO_MEM, TAG, "buffer alloc failed");
         if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
             ESP_LOGI(TAG, "Found URL query => %s", buf);
@@ -330,11 +332,11 @@ static esp_err_t any_handler(httpd_req_t *req)
 
 static const httpd_uri_t any = {
     .uri       = "/any",
-    .method    = HTTP_ANY,
+    .method    = static_cast<httpd_method_t> (HTTP_ANY),
     .handler   = any_handler,
     /* Let's pass response string in user
      * context to demonstrate it's usage */
-    .user_ctx  = "Hello World ZZZ!"
+    .user_ctx  = (void*) "Hello World ZZZ!"
 };
 
 /* This handler allows the custom error handling functionality to be
@@ -519,9 +521,6 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 }
 #endif // !CONFIG_IDF_TARGET_LINUX
 
-#define BMP 0
-#define MPU 0
-
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
 // #define LEDC_OUTPUT_IO          (13) // GPIO для вывода PWM
@@ -529,7 +528,7 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 #define LEDC_DUTY_RES           LEDC_TIMER_13_BIT // Разрешение ШИМ
 #define LEDC_FREQUENCY          (50) // Частота ШИМ в Гц (стандартная для ESC)
 
-#define MOTOR_COUNT 4
+#define MOTOR_COUNT 1
 
 static const char *TAG_MOTOR = "BLDC_MOTOR_CONTROL";
 
@@ -567,7 +566,7 @@ int custom_log_vprintf(const char *fmt, va_list args) {
     return vprintf(fmt, args);
 }
 
-void app_main()
+extern "C" void app_main()
 {
     static httpd_handle_t server = NULL;
 
@@ -603,28 +602,29 @@ void app_main()
 
 
     // Create a binary semaphore
-    // ba_semaphore = xSemaphoreCreateBinary();
+    ba_semaphore = xSemaphoreCreateBinary();
 
     // Set the custom log output function
-    // esp_log_set_vprintf(custom_log_vprintf);
+    esp_log_set_vprintf(custom_log_vprintf);
 
 
     // Wait for the <ba-add> event
-    // if (xSemaphoreTake(ba_semaphore, portMAX_DELAY) == pdTRUE) {
-    //     ESP_LOGI("main", "Detected <ba-add> event, continuing execution");
-    // }
+    if (xSemaphoreTake(ba_semaphore, portMAX_DELAY) == pdTRUE) {
+        ESP_LOGI("main", "Detected <ba-add> event, continuing execution");
+    }
 
     // Настройка таймера ШИМ
     ledc_timer_config_t ledc_timer = {
         .speed_mode       = LEDC_MODE,
-        .timer_num        = LEDC_TIMER,
         .duty_resolution  = LEDC_DUTY_RES,
+        .timer_num        = LEDC_TIMER,
         .freq_hz          = LEDC_FREQUENCY,
-        .clk_cfg          = LEDC_AUTO_CLK
+        .clk_cfg          = LEDC_AUTO_CLK,
+        .deconfigure      = false
     };
 
-    ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
-    size_t gpio_motor_channel[MOTOR_COUNT] = {32, 4, 15, 13}; //{13, 32, 4, 15};
+    ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0}; // , LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
+    size_t gpio_motor_channel[MOTOR_COUNT] = {32}; //13, 32, 4, 15};
 
     ledc_channel_config_t ledc_motor_channel[MOTOR_COUNT] = {};
 
@@ -647,43 +647,27 @@ void app_main()
     float min_period = 1000;
     float max_period = 1500; //max period in us
 
-    char ret_mpu[100];
-    char ret_bmp[100];
     char ret_duty[1000];
+
+    // Initialize I2C
+    mpu6050_handler mpu_handler;
+    bmp280_handler bmp_handler;
+    init_sensors(&mpu_handler, &bmp_handler);
+
 
     ESP_LOGI(TAG_MOTOR, "Initializing ESC...");
     // Инициализация ESC (отправка min и max сигнала на секунду)
     for(int i = 0; i < MOTOR_COUNT; i++){
         set_duty_microseconds(&ledc_motor_channel[i], ret_duty, min_period); // 1000 мкс (минимальная скорость)
+        vTaskDelay(pdMS_TO_TICKS(1000)); //ждем
+        set_duty_microseconds(&ledc_motor_channel[i], ret_duty, max_period); // 1500 мкс (максимальная скорость)
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        set_duty_microseconds(&ledc_motor_channel[i], ret_duty, min_period);
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
-    vTaskDelay(pdMS_TO_TICKS(2000)); //ждем секунду
-
-    for(int defenitly_not_used_variable_name = 0; defenitly_not_used_variable_name < MOTOR_COUNT; defenitly_not_used_variable_name++){
-        set_duty_microseconds(&(ledc_motor_channel[defenitly_not_used_variable_name]), ret_duty, max_period); // 2000 мкс (максимальная скорость)
-    }
-    vTaskDelay(pdMS_TO_TICKS(2000)); //ждем секунду
-
-    // Initialize I2C
-    esp_err_t ret = i2c_master_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "I2C initialization failed");
-        return;
-    }
-
-    // Initialize BMP280
-    #if BMP
-    bmp280_init();
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    bmp280_read_calibration_data();
-    #endif
-
-    #if MPU
-    // Initialize MPU6050
-    mpu6050_init();
-    #endif
 
     fullfilment = 0;
-    float prev_fulfillment = 100;
+    float prev_fulfillment = 0;
     float duty_ms = 0;
 
     while (server) {
@@ -696,24 +680,14 @@ void app_main()
             }
         }
         
-        // Read data from BMP280
-        #if BMP
-        bmp280_read_data(ret_bmp);
-        strcat(hello.user_ctx, ret_bmp);
-        #endif
+        //read sensors data
+        read_sensors(&mpu_handler, &bmp_handler);
+        mpu_handler.print_data();
+        bmp_handler.print_data();
 
-        #if MPU
-        // Read data from MPU6050
-        mpu6050_read_data(ret_mpu);
-        strcat(hello.user_ctx, ret_mpu);
-        #endif
+        snprintf((char*) hello.user_ctx, 100, "oboroty: %0.4f\n", duty_ms);
+        strcat((char*) hello.user_ctx, ret_duty);
 
-
-        snprintf(hello.user_ctx, 100, "oboroty: %0.4f\n", duty_ms);
-        strcat(hello.user_ctx, ret_duty);
-
-
-        // Delay for 1 second
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

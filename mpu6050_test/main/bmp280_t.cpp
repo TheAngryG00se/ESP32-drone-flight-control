@@ -19,7 +19,6 @@ void bmp280_test(void *pvParameters)
     printf("params generated\n");
 
     // ESP_ERROR_CHECK(bmp280_init_desc(&dev, BMP280_I2C_ADDRESS_0, 0, CONFIG_EXAMPLE_I2C_MASTER_SDA, CONFIG_EXAMPLE_I2C_MASTER_SCL));
-
     ESP_ERROR_CHECK(bmp280_init_desc(&dev, BMP280_I2C_ADDRESS_0, I2C_NUM_0, GPIO_NUM_21, GPIO_NUM_22));
 
     ESP_ERROR_CHECK(bmp280_init(&dev, &params));
@@ -38,11 +37,8 @@ void bmp280_test(void *pvParameters)
             printf("Temperature/pressure reading failed\n");
             continue;
         }
-        /* float is used in printf(). you need non-default configuration in
-         * sdkconfig for ESP8266, which is enabled by default for this
-         * example. see sdkconfig.defaults.esp8266
-         */
         printf("Pressure: %.2f Pa, Temperature: %.2f C", pressure, temperature);
+
         if (bme280p)
             printf(", Humidity: %.2f\n", humidity);
         else

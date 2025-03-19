@@ -1,27 +1,34 @@
-#include "stdlib.h"
-#include <math.h>
-#include "driver/i2c.h"
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include "MPU6050.h"
+// #include "MPU6050_6Axis_MotionApps20.h" //хз почему, но конкретно эта строка мешает линковке (multiple def errors)
+#include <bmp280.h>
 
-#define I2C_MASTER_SCL_IO 22        // GPIO pin for I2C clock
-#define I2C_MASTER_SDA_IO 21        // GPIO pin for I2C data
-#define I2C_MASTER_FREQ_HZ 100000   // I2C master clock frequency
-#define I2C_MASTER_PORT I2C_NUM_0   // I2C port number
+#define PIN_SDA 21
+#define PIN_CLK 22
+#define I2C_PORT I2C_NUM_0
 
-#define BMP280_ADDR 0x76            // BMP280 I2C address
-#define MPU6050_ADDR 0x68           // MPU6050 I2C address
+struct mpu6050_handler{
+    MPU6050 mpu;                 // mpu6050 instance
+    Quaternion q;                // [w, x, y, z]         quaternion container
+    VectorFloat gravity;         // [x, y, z]            gravity vector
+    float ypr[3];                // [yaw, pitch, roll]   yaw/pitch/roll container
+    uint16_t packetSize = 42;    // expected DMP packet size (default is 42 bytes)
+    uint16_t fifoCount;          // count of all bytes currently in FIFO
+    uint8_t fifoBuffer[64];      // FIFO storage buffer
+    uint8_t mpuIntStatus;        // holds actual interrupt status byte from MPU
 
+    void read_data();
+    void print_data();
+};
 
-// BMP280 calibration data
+struct bmp280_handler{
+    float pressure;
+    float temperature; 
+    float humidity;
+    bmp280_t bmp_dev;
 
-esp_err_t i2c_master_init();
+    void read_data();
+    void print_data();
+};
 
-
-void bmp280_init();
-void bmp280_read_calibration_data();
-void bmp280_read_data();
-
-void mpu6050_init();
-void mpu6050_read_data();
+esp_err_t init_sensors(mpu6050_handler* mpu_handler, bmp280_handler* bmp_handler);
+void read_sensors(mpu6050_handler* mpu_handler, bmp280_handler* bmp_handler);
