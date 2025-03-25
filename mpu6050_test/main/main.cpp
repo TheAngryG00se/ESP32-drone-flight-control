@@ -15,17 +15,20 @@
 #define PIN_CLK 22
 #define I2C_PORT I2C_NUM_0
 
-// Глобальные переменные для MPU6050
-Quaternion q;           // [w, x, y, z]         quaternion container
-VectorFloat gravity;    // [x, y, z]            gravity vector
-float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container
-uint16_t packetSize = 42;    // expected DMP packet size (default is 42 bytes)
-uint16_t fifoCount;     // count of all bytes currently in FIFO
-uint8_t fifoBuffer[64]; // FIFO storage buffer
-uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
+
 
 // Функция для чтения данных с обоих датчиков
 void read_sensors(void *pvParameters) {
+
+    // Глобальные переменные для MPU6050
+    Quaternion q;           // [w, x, y, z]         quaternion container
+    VectorFloat gravity;    // [x, y, z]            gravity vector
+    float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container
+    uint16_t packetSize = 42;    // expected DMP packet size (default is 42 bytes)
+    uint16_t fifoCount;     // count of all bytes currently in FIFO
+    uint8_t fifoBuffer[64]; // FIFO storage buffer
+    uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
+
     // Инициализация i2cdev
     esp_err_t ret = i2cdev_init();
     if (ret != ESP_OK) {
@@ -72,14 +75,8 @@ void read_sensors(void *pvParameters) {
 
     while (1) {
         // Чтение данных с BMP280
-        if (bmp280_read_float(&bmp_dev, &temperature, &pressure, &humidity) == ESP_OK) {
-            if (bme280p) {
-                printf(", Humidity: %.2f\n", humidity);
-            } else {
-                // printf("\n");
-            }
-        } else {
-            printf("BMP280: Failed to read data\n");
+        if (bmp280_read_float(&bmp_dev, &temperature, &pressure, &humidity) != ESP_OK) {
+            printf("\n\nBMP280: Failed to read data\n\n");
         }
 
         // Чтение данных с MPU6050
@@ -94,6 +91,7 @@ void read_sensors(void *pvParameters) {
             while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
             mpu.getFIFOBytes(fifoBuffer, packetSize);
             mpu.dmpGetQuaternion(&q, fifoBuffer);
+            
             mpu.dmpGetGravity(&gravity, &q);
             mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
             // printf("MPU6050: YAW: %3.1f, PITCH: %3.1f, ROLL: %3.1f \n", ypr[0] * 180/M_PI, ypr[1] * 180/M_PI, ypr[2] * 180/M_PI);
@@ -101,8 +99,7 @@ void read_sensors(void *pvParameters) {
 
         printf("YAW: %3.1f, PITCH: %3.1f, ROLL: %3.1f Pressure: %.2f Pa, Temperature: %.2f C\n", ypr[0] * 180/M_PI, ypr[1] * 180/M_PI, ypr[2] * 180/M_PI, pressure, temperature);
 
-        // Задержка между чтениями
-        vTaskDelay(pdMS_TO_TICKS(100)); // Reduced delay to prevent FIFO overflow
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 

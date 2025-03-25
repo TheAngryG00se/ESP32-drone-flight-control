@@ -8,6 +8,8 @@
     "idf.toolsPath": "/home/mihail/.espressif",
     "idf.flashType": "UART",
     "files.associations": {
-        "*.tcc": "c"
+        "*.tcc": "c",
+        "i2c.h": "c",
+        "esp_log.h": "c"
     }
 }
