@@ -49,7 +49,7 @@
 
 static const char *TAG = "example";
 
-double fullfilment = 0;
+float tar_fullfilment = 0;
 
 #if CONFIG_EXAMPLE_BASIC_AUTH
 
@@ -180,7 +180,7 @@ static void httpd_register_basic_auth(httpd_handle_t server)
 }
 #endif
 
-char msg[1200] = {};
+char msg[500] = {};
 /* An HTTP GET handler */
 static esp_err_t hello_get_handler(httpd_req_t *req)
 {
@@ -264,7 +264,7 @@ static esp_err_t hello_get_handler(httpd_req_t *req)
         ESP_LOGI(TAG, "Request headers lost");
     }
 
-    memset(msg, 0, 1200);
+    memset(msg, 0, 500);
     ESP_LOGI(TAG, "FREED: %s", msg);
     return ESP_OK;
 }
@@ -432,14 +432,14 @@ static esp_err_t control_post_handler(httpd_req_t *req)
         httpd_resp_send_chunk(req, buf, ret);
         remaining -= ret;
         
-        float tmp = fullfilment;
-        if(sscanf(buf, "%lf", &fullfilment) != 1){
-            fullfilment = tmp;
+        float tmp;
+        if(sscanf(buf, "%f", &tmp) == 1){
+            tar_fullfilment = tmp;
         }
 
         /* Log data received */
         ESP_LOGI(TAG, "=========== RECEIVED DATA ==========");
-        ESP_LOGI(TAG, "%lf", fullfilment);
+        ESP_LOGI(TAG, "%lf -> %lf", tmp, tar_fullfilment);
         ESP_LOGI(TAG, "%.*s", ret, buf);
         ESP_LOGI(TAG, "====================================");
     }
@@ -528,7 +528,9 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 #define LEDC_DUTY_RES           LEDC_TIMER_13_BIT // Разрешение ШИМ
 #define LEDC_FREQUENCY          (50) // Частота ШИМ в Гц (стандартная для ESC)
 
-#define MOTOR_COUNT 1
+#define MOTOR_COUNT 4
+#define BA_AWAIT 0
+#define SENSOR_READ 0
 
 static const char *TAG_MOTOR = "BLDC_MOTOR_CONTROL";
 
@@ -547,7 +549,6 @@ void set_duty_microseconds(ledc_channel_config_t* motor_channel, char* buf, floa
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, motor_channel->channel, duty));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, motor_channel->channel));
 }
-
 
 static SemaphoreHandle_t ba_semaphore;
 
@@ -583,35 +584,31 @@ extern "C" void app_main()
     /* Register event handlers to stop the server when Wi-Fi or Ethernet is disconnected,
      * and re-start it upon connection.
      */
-#if !CONFIG_IDF_TARGET_LINUX
-#ifdef CONFIG_EXAMPLE_CONNECT_WIFI
-    printf("bebra wifi\n"); 
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &connect_handler, &server));
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &disconnect_handler, &server));
-#endif // CONFIG_EXAMPLE_CONNECT_WIFI
-#ifdef CONFIG_EXAMPLE_CONNECT_ETHERNET
-    printf("bebra ethernet\n");
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &connect_handler, &server));
-    ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ETHERNET_EVENT_DISCONNECTED, &disconnect_handler, &server));
-#endif // CONFIG_EXAMPLE_CONNECT_ETHERNET
-#endif // !CONFIG_IDF_TARGET_LINUX
+    #if !CONFIG_IDF_TARGET_LINUX
+    #ifdef CONFIG_EXAMPLE_CONNECT_WIFI
+        printf("bebra wifi\n"); 
+        ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &connect_handler, &server));
+        ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &disconnect_handler, &server));
+    #endif // CONFIG_EXAMPLE_CONNECT_WIFI
+    #ifdef CONFIG_EXAMPLE_CONNECT_ETHERNET
+        printf("bebra ethernet\n");
+        ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &connect_handler, &server));
+        ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ETHERNET_EVENT_DISCONNECTED, &disconnect_handler, &server));
+    #endif // CONFIG_EXAMPLE_CONNECT_ETHERNET
+    #endif // !CONFIG_IDF_TARGET_LINUX
 
     /* Start the server for the first time */
     server = start_webserver();
     // Initialize Wi-Fi and connect (as shown in the previous example)
 
-
-    // Create a binary semaphore
-    ba_semaphore = xSemaphoreCreateBinary();
-
-    // Set the custom log output function
-    esp_log_set_vprintf(custom_log_vprintf);
-
-
     // Wait for the <ba-add> event
+    #if BA_AWAIT
+    ba_semaphore = xSemaphoreCreateBinary();
+    esp_log_set_vprintf(custom_log_vprintf);
     if (xSemaphoreTake(ba_semaphore, portMAX_DELAY) == pdTRUE) {
         ESP_LOGI("main", "Detected <ba-add> event, continuing execution");
     }
+    #endif
 
     // Настройка таймера ШИМ
     ledc_timer_config_t ledc_timer = {
@@ -623,8 +620,8 @@ extern "C" void app_main()
         .deconfigure      = false
     };
 
-    ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0}; // , LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
-    size_t gpio_motor_channel[MOTOR_COUNT] = {32}; //13, 32, 4, 15};
+    ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
+    size_t gpio_motor_channel[MOTOR_COUNT] = {13, 32, 4, 15};
 
     ledc_channel_config_t ledc_motor_channel[MOTOR_COUNT] = {};
 
@@ -645,35 +642,34 @@ extern "C" void app_main()
     }
     
     float min_period = 1000;
-    float max_period = 1500; //max period in us
+    float max_period = 2000; //max period in us
 
     char ret_duty[1000];
 
     // Initialize I2C
+    #if SENSOR_READ
     mpu6050_handler mpu_handler;
     bmp280_handler bmp_handler;
     init_sensors(&mpu_handler, &bmp_handler);
-
+    #endif
 
     ESP_LOGI(TAG_MOTOR, "Initializing ESC...");
     // Инициализация ESC (отправка min и max сигнала на секунду)
     for(int i = 0; i < MOTOR_COUNT; i++){
-        set_duty_microseconds(&ledc_motor_channel[i], ret_duty, min_period); // 1000 мкс (минимальная скорость)
-        vTaskDelay(pdMS_TO_TICKS(1000)); //ждем
-        set_duty_microseconds(&ledc_motor_channel[i], ret_duty, max_period); // 1500 мкс (максимальная скорость)
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        set_duty_microseconds(&ledc_motor_channel[i], ret_duty, min_period);
-        vTaskDelay(pdMS_TO_TICKS(500));
+        set_duty_microseconds(&ledc_motor_channel[i], ret_duty, max_period); // 1000 мкс (минимальная скорость)
     }
 
-    fullfilment = 0;
-    float prev_fulfillment = 0;
+    tar_fullfilment = 100;
+    float cur_fulfillment = 100;
     float duty_ms = 0;
-
+    float diff = 0;
+    float step = 1;
     while (server) {
-        if(prev_fulfillment != fullfilment){
-            duty_ms = min_period*(1 + (max_period/min_period - 1)*(fullfilment/100));
-            prev_fulfillment = fullfilment;
+        if(cur_fulfillment != tar_fullfilment){
+            diff = tar_fullfilment - cur_fulfillment;
+            cur_fulfillment += (diff > 0)?((diff > step)?(step):(diff)):(((diff < -step)?(-step):(diff)));
+            ESP_LOGI(TAG_MOTOR, "current ff: %f", cur_fulfillment);
+            duty_ms = min_period*(1 + (max_period/min_period - 1)*(cur_fulfillment/100));
             memset(ret_duty, 0, 1000);
             for(int i = 0; i < MOTOR_COUNT; ++i){
                 set_duty_microseconds(&ledc_motor_channel[i], ret_duty, duty_ms);
@@ -681,9 +677,11 @@ extern "C" void app_main()
         }
         
         //read sensors data
+        #if SENSOR_READ
         read_sensors(&mpu_handler, &bmp_handler);
         mpu_handler.print_data();
         bmp_handler.print_data();
+        #endif
 
         snprintf((char*) hello.user_ctx, 100, "oboroty: %0.4f\n", duty_ms);
         strcat((char*) hello.user_ctx, ret_duty);
