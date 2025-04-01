@@ -1,12 +1,3 @@
-/* Simple HTTP Server Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
-
 ///server///
 #include <string.h>
 #include <stdlib.h>
@@ -39,7 +30,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "sensors.h"
+#include "sensors.hpp"
+#include "motors.hpp"
 
 #define EXAMPLE_HTTP_QUERY_KEY_MAX_LEN  (64)
 
@@ -47,9 +39,11 @@
  * handlers for the web server.
  */
 
-static const char *TAG = "example";
+static const char* TAG = "example";
 
-float tar_fullfilment = 0;
+
+
+float tar_overall_throttle = 0;
 
 #if CONFIG_EXAMPLE_BASIC_AUTH
 
@@ -339,18 +333,6 @@ static const httpd_uri_t any = {
     .user_ctx  = (void*) "Hello World ZZZ!"
 };
 
-/* This handler allows the custom error handling functionality to be
- * tested from client side. For that, when a PUT request 0 is sent to
- * URI /ctrl, the /hello and /echo URIs are unregistered and following
- * custom error handler http_404_error_handler() is registered.
- * Afterwards, when /hello or /echo is requested, this custom error
- * handler is invoked which, after sending an error message to client,
- * either closes the underlying socket (when requested URI is /echo)
- * or keeps it open (when requested URI is /hello). This allows the
- * client to infer if the custom error handler is functioning as expected
- * by observing the socket state.
- */
-
 esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
 {
     if (strcmp("/hello", req->uri) == 0) {
@@ -434,12 +416,12 @@ static esp_err_t control_post_handler(httpd_req_t *req)
         
         float tmp;
         if(sscanf(buf, "%f", &tmp) == 1){
-            tar_fullfilment = tmp;
+            tar_overall_throttle = tmp;
         }
 
         /* Log data received */
         ESP_LOGI(TAG, "=========== RECEIVED DATA ==========");
-        ESP_LOGI(TAG, "%lf -> %lf", tmp, tar_fullfilment);
+        ESP_LOGI(TAG, "%lf -> %lf", tmp, tar_overall_throttle);
         ESP_LOGI(TAG, "%.*s", ret, buf);
         ESP_LOGI(TAG, "====================================");
     }
@@ -521,6 +503,7 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 }
 #endif // !CONFIG_IDF_TARGET_LINUX
 
+
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
 // #define LEDC_OUTPUT_IO          (13) // GPIO для вывода PWM
@@ -530,11 +513,10 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
 
 #define MOTOR_COUNT 4
 #define BA_AWAIT 0
-#define SENSOR_READ 0
+#define SENSOR_READ 1
 
 static const char *TAG_MOTOR = "BLDC_MOTOR_CONTROL";
 
-// Функция для установки duty cycle в микросекундах
 void set_duty_microseconds(ledc_channel_config_t* motor_channel, char* buf, float duty_us) {
     // Преобразуем микросекунды в значение duty cycle
     uint32_t max_duty = (1 << LEDC_DUTY_RES) - 1; // Максимальное значение duty cycle
@@ -552,7 +534,6 @@ void set_duty_microseconds(ledc_channel_config_t* motor_channel, char* buf, floa
 
 static SemaphoreHandle_t ba_semaphore;
 
-// Custom log output function
 int custom_log_vprintf(const char *fmt, va_list args) {
     char log_msg[256];
     vsnprintf(log_msg, sizeof(log_msg), fmt, args);
@@ -566,6 +547,7 @@ int custom_log_vprintf(const char *fmt, va_list args) {
     // Forward the log to the default output
     return vprintf(fmt, args);
 }
+
 
 extern "C" void app_main()
 {
@@ -610,82 +592,132 @@ extern "C" void app_main()
     }
     #endif
 
+
     // Настройка таймера ШИМ
-    ledc_timer_config_t ledc_timer = {
-        .speed_mode       = LEDC_MODE,
-        .duty_resolution  = LEDC_DUTY_RES,
-        .timer_num        = LEDC_TIMER,
-        .freq_hz          = LEDC_FREQUENCY,
-        .clk_cfg          = LEDC_AUTO_CLK,
-        .deconfigure      = false
-    };
+    // ledc_timer_config_t ledc_timer = {
+    //     .speed_mode       = LEDC_MODE,
+    //     .duty_resolution  = LEDC_DUTY_RES,
+    //     .timer_num        = LEDC_TIMER,
+    //     .freq_hz          = LEDC_FREQUENCY,
+    //     .clk_cfg          = LEDC_AUTO_CLK,
+    //     .deconfigure      = false
+    // };
 
-    ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
-    size_t gpio_motor_channel[MOTOR_COUNT] = {13, 32, 4, 15};
+    // ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
 
-    ledc_channel_config_t ledc_motor_channel[MOTOR_COUNT] = {};
+    // size_t gpio_motor_channel[MOTOR_COUNT] = {13, 32, 4, 15};
 
-    for(int i = 0; i < MOTOR_COUNT; ++i){
-        ledc_motor_channel[i].speed_mode     = LEDC_MODE;
-        ledc_motor_channel[i].channel        = motor_ledc_channel_number[i];
-        ledc_motor_channel[i].timer_sel      = LEDC_TIMER;
-        ledc_motor_channel[i].intr_type      = LEDC_INTR_DISABLE;
-        ledc_motor_channel[i].gpio_num       = gpio_motor_channel[i];
-        ledc_motor_channel[i].duty           = 0; // Начальная скважность
-        ledc_motor_channel[i].hpoint         = 0;
-    }
+    // ledc_channel_config_t ledc_motor_channel[MOTOR_COUNT] = {};
 
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+    // for(int i = 0; i < MOTOR_COUNT; ++i){
+    //     ledc_motor_channel[i].speed_mode     = LEDC_MODE;
+    //     ledc_motor_channel[i].channel        = motor_ledc_channel_number[i];
+    //     ledc_motor_channel[i].timer_sel      = LEDC_TIMER;
+    //     ledc_motor_channel[i].intr_type      = LEDC_INTR_DISABLE;
+    //     ledc_motor_channel[i].gpio_num       = gpio_motor_channel[i];
+    //     ledc_motor_channel[i].duty           = 0; // Начальная скважность
+    //     ledc_motor_channel[i].hpoint         = 0;
+    // }
 
-    for(int i = 0; i < MOTOR_COUNT; ++i){
-        ESP_ERROR_CHECK(ledc_channel_config(&ledc_motor_channel[i]));
-    }
-    
-    float min_period = 1000;
-    float max_period = 2000; //max period in us
+    // ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
-    char ret_duty[1000];
+    // for(int i = 0; i < MOTOR_COUNT; ++i){
+    //     ESP_ERROR_CHECK(ledc_channel_config(&ledc_motor_channel[i]));
+    // }
+
+    // float min_period = 1000;
+    // float max_period = 2000; //max period in us
+
+    // char* ret_duty = (char*) calloc(1000, sizeof(char));
 
     // Initialize I2C
-    #if SENSOR_READ
-    mpu6050_handler mpu_handler;
-    bmp280_handler bmp_handler;
-    init_sensors(&mpu_handler, &bmp_handler);
-    #endif
+    // #if SENSOR_READ
+    // mpu6050_handler mpu_handler;
+    // bmp280_handler bmp_handler;
+    // init_sensors(&mpu_handler, &bmp_handler);
+    // #endif
 
-    ESP_LOGI(TAG_MOTOR, "Initializing ESC...");
-    // Инициализация ESC (отправка min и max сигнала на секунду)
-    for(int i = 0; i < MOTOR_COUNT; i++){
-        set_duty_microseconds(&ledc_motor_channel[i], ret_duty, max_period); // 1000 мкс (минимальная скорость)
-    }
+    // ESP_LOGI(TAG_MOTOR, "Initializing ESC...");
+    // // Инициализация ESC (отправка min и max сигнала на секунду)
+    // for(int i = 0; i < MOTOR_COUNT; i++){
+    //     set_duty_microseconds(&ledc_motor_channel[i], ret_duty, max_period); // 1000 мкс (минимальная скорость)
+    // }
 
-    tar_fullfilment = 100;
-    float cur_fulfillment = 100;
-    float duty_ms = 0;
-    float diff = 0;
-    float step = 1;
-    while (server) {
-        if(cur_fulfillment != tar_fullfilment){
-            diff = tar_fullfilment - cur_fulfillment;
-            cur_fulfillment += (diff > 0)?((diff > step)?(step):(diff)):(((diff < -step)?(-step):(diff)));
-            ESP_LOGI(TAG_MOTOR, "current ff: %f", cur_fulfillment);
-            duty_ms = min_period*(1 + (max_period/min_period - 1)*(cur_fulfillment/100));
-            memset(ret_duty, 0, 1000);
-            for(int i = 0; i < MOTOR_COUNT; ++i){
-                set_duty_microseconds(&ledc_motor_channel[i], ret_duty, duty_ms);
-            }
+    tar_overall_throttle = 100;
+    float cur_overall_throttle = 100;
+
+    /*
+    4   13
+     \ /
+      ^
+     / \
+    15  32
+    */
+
+    drone Drone;
+    Drone.initialize_motors_and_timer(LEDC_TIMER_13_BIT, LEDC_LOW_SPEED_MODE, 50, 1000, 2000, 4, 13, 32, 15);
+    Drone.set_duty(100);
+
+    vTaskDelay(pdMS_TO_TICKS(500));
+    //arming motors
+
+    ESP_LOGI("DRONE",  "waiting for arming zero...");
+    while (server){
+        if(tar_overall_throttle == 0){
+            cur_overall_throttle = 0;
+            Drone.set_throttle(0);
+            Drone.update_motors();
+            break;
         }
-        
-        //read sensors data
-        #if SENSOR_READ
-        read_sensors(&mpu_handler, &bmp_handler);
-        mpu_handler.print_data();
-        bmp_handler.print_data();
-        #endif
-
-        snprintf((char*) hello.user_ctx, 100, "oboroty: %0.4f\n", duty_ms);
-        strcat((char*) hello.user_ctx, ret_duty);
-
         vTaskDelay(pdMS_TO_TICKS(10));
     }
+
+    Drone.initialize_sensors();
+
+    ESP_LOGI("DRONE", "GOT IT!, waiting 5s...");
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    ESP_LOGI("DRONE", "waiting done.");
+    //motors armed
+
+    //control loop
+    Drone.set_targets(0,0,0);
+    while (server){
+        Drone.read_sensors_values();
+
+        if(tar_overall_throttle != cur_overall_throttle){
+            Drone.set_throttle(tar_overall_throttle);
+            cur_overall_throttle = tar_overall_throttle;
+        }
+
+        // Drone.processPID();
+        Drone.update_motors();
+        Drone.print_state();
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+
+    // float duty_ms = 0;
+    // float diff = 0;
+    // float step = 1;
+    // while (server) {
+    //     //read sensors data
+    //     #if SENSOR_READ
+    //     read_sensors(&mpu_handler, &bmp_handler);
+    //     mpu_handler.print_data();
+    //     bmp_handler.print_data();
+    //     #endif
+
+    //     if(cur_fulfillment != tar_overall_throttle){
+    //         diff = tar_overall_throttle - cur_fulfillment;
+    //         cur_fulfillment += (diff > 0)?((diff > step)?(step):(diff)):(((diff < -step)?(-step):(diff)));
+    //         ESP_LOGI(TAG_MOTOR, "current ff: %f", cur_fulfillment);
+    //         duty_ms = min_period*(1 + (max_period/min_period - 1)*(cur_fulfillment/100));
+    //         memset(ret_duty, 0, 1000);
+    //         for(int i = 0; i < MOTOR_COUNT; ++i){
+    //             set_duty_microseconds(&ledc_motor_channel[i], ret_duty, duty_ms);
+    //         }
+    //     }
+        
+    //     vTaskDelay(pdMS_TO_TICKS(10));
+    // }
 }

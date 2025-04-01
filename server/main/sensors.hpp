@@ -1,3 +1,5 @@
+#pragma once
+
 #include "MPU6050.h"
 // #include "MPU6050_6Axis_MotionApps20.h" //хз почему, но конкретно эта строка мешает линковке (multiple def errors)
 #include <bmp280.h>
@@ -7,14 +9,17 @@
 #define I2C_PORT I2C_NUM_0
 
 struct mpu6050_handler{
-    MPU6050 mpu;                 // mpu6050 instance
-    Quaternion q;                // [w, x, y, z]         quaternion container
-    VectorFloat gravity;         // [x, y, z]            gravity vector
-    float ypr[3];                // [yaw, pitch, roll]   yaw/pitch/roll container
+private:
     uint16_t packetSize = 42;    // expected DMP packet size (default is 42 bytes)
     uint16_t fifoCount;          // count of all bytes currently in FIFO
     uint8_t fifoBuffer[64];      // FIFO storage buffer
     uint8_t mpuIntStatus;        // holds actual interrupt status byte from MPU
+    public:
+    MPU6050 mpu;                 // mpu6050 instance
+    Quaternion q;                // [w, x, y, z]         quaternion container
+    VectorFloat gravity;         // [x, y, z]            gravity vector
+    float ypr[3];                // [yaw, pitch, roll]   yaw/pitch/roll container
+    
 
     void read_data();
     void print_data();

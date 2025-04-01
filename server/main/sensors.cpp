@@ -10,7 +10,7 @@
 #include "MPU6050_6Axis_MotionApps20.h"
 #include "i2cdev.h"
 
-#include "sensors.h"
+#include "sensors.hpp"
 
 void bmp280_handler::print_data(){
     printf("pressure: %.2f, temperature: %.2f\n", pressure, temperature);
