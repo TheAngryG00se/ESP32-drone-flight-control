@@ -592,57 +592,6 @@ extern "C" void app_main()
     }
     #endif
 
-
-    // Настройка таймера ШИМ
-    // ledc_timer_config_t ledc_timer = {
-    //     .speed_mode       = LEDC_MODE,
-    //     .duty_resolution  = LEDC_DUTY_RES,
-    //     .timer_num        = LEDC_TIMER,
-    //     .freq_hz          = LEDC_FREQUENCY,
-    //     .clk_cfg          = LEDC_AUTO_CLK,
-    //     .deconfigure      = false
-    // };
-
-    // ledc_channel_t motor_ledc_channel_number[MOTOR_COUNT] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3};
-
-    // size_t gpio_motor_channel[MOTOR_COUNT] = {13, 32, 4, 15};
-
-    // ledc_channel_config_t ledc_motor_channel[MOTOR_COUNT] = {};
-
-    // for(int i = 0; i < MOTOR_COUNT; ++i){
-    //     ledc_motor_channel[i].speed_mode     = LEDC_MODE;
-    //     ledc_motor_channel[i].channel        = motor_ledc_channel_number[i];
-    //     ledc_motor_channel[i].timer_sel      = LEDC_TIMER;
-    //     ledc_motor_channel[i].intr_type      = LEDC_INTR_DISABLE;
-    //     ledc_motor_channel[i].gpio_num       = gpio_motor_channel[i];
-    //     ledc_motor_channel[i].duty           = 0; // Начальная скважность
-    //     ledc_motor_channel[i].hpoint         = 0;
-    // }
-
-    // ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
-
-    // for(int i = 0; i < MOTOR_COUNT; ++i){
-    //     ESP_ERROR_CHECK(ledc_channel_config(&ledc_motor_channel[i]));
-    // }
-
-    // float min_period = 1000;
-    // float max_period = 2000; //max period in us
-
-    // char* ret_duty = (char*) calloc(1000, sizeof(char));
-
-    // Initialize I2C
-    // #if SENSOR_READ
-    // mpu6050_handler mpu_handler;
-    // bmp280_handler bmp_handler;
-    // init_sensors(&mpu_handler, &bmp_handler);
-    // #endif
-
-    // ESP_LOGI(TAG_MOTOR, "Initializing ESC...");
-    // // Инициализация ESC (отправка min и max сигнала на секунду)
-    // for(int i = 0; i < MOTOR_COUNT; i++){
-    //     set_duty_microseconds(&ledc_motor_channel[i], ret_duty, max_period); // 1000 мкс (минимальная скорость)
-    // }
-
     tar_overall_throttle = 100;
     float cur_overall_throttle = 100;
 
@@ -689,35 +638,9 @@ extern "C" void app_main()
             cur_overall_throttle = tar_overall_throttle;
         }
 
-        // Drone.processPID();
+        Drone.processPID();
         Drone.update_motors();
         Drone.print_state();
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-
-
-    // float duty_ms = 0;
-    // float diff = 0;
-    // float step = 1;
-    // while (server) {
-    //     //read sensors data
-    //     #if SENSOR_READ
-    //     read_sensors(&mpu_handler, &bmp_handler);
-    //     mpu_handler.print_data();
-    //     bmp_handler.print_data();
-    //     #endif
-
-    //     if(cur_fulfillment != tar_overall_throttle){
-    //         diff = tar_overall_throttle - cur_fulfillment;
-    //         cur_fulfillment += (diff > 0)?((diff > step)?(step):(diff)):(((diff < -step)?(-step):(diff)));
-    //         ESP_LOGI(TAG_MOTOR, "current ff: %f", cur_fulfillment);
-    //         duty_ms = min_period*(1 + (max_period/min_period - 1)*(cur_fulfillment/100));
-    //         memset(ret_duty, 0, 1000);
-    //         for(int i = 0; i < MOTOR_COUNT; ++i){
-    //             set_duty_microseconds(&ledc_motor_channel[i], ret_duty, duty_ms);
-    //         }
-    //     }
-        
-    //     vTaskDelay(pdMS_TO_TICKS(10));
-    // }
 }

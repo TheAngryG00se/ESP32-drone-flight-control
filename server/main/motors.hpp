@@ -70,13 +70,13 @@ class drone{
     double YPR_diff_n1[3] = {};  //YPR on previous iteration
     double YPR_diff_n2 [3] = {}; //YPR on prev-previous iteration
 
-    double PID_Kprop[3] = {5, 5, 5};
-    double PID_Kdiff[3] = {0.1, 0.1, 0.1};
-    double PID_Kintegr[3] = {0.01, 0.01, 0.01};
+    double PID_Kprop[3] = {2, 2, 2};
+    double PID_Kdiff[3] = {3, 3, 3};
+    double PID_Kintegr[3] = {0.1, 0.1, 0.1};
 
     double Control_val_YPR[3] = {};
 
-    double max_throttle = 100;
+    double max_throttle = 30;
 
 public:
 
@@ -176,24 +176,30 @@ public:
     void processPID(){
         //replacing iteration steps with new ones
         //getting new controlling values on Yaw (0), Pitch (1) and Roll (2)
+
+        bool YPR_tune[3] = {true, true, true};
+        int PID_tune[3] = {1, 1, 1};
+
         double val = 0;
-        for(int i = 1; i < 2; i++) {
-            YPR_diff_n2[i] = YPR_diff_n1[i];
-            YPR_diff_n1[i] = YPR_diff_n[i];
-            YPR_diff_n[i] = YPR_tar[i] - mpu6050.ypr[i];
-
-            /* U(n) =   U(n-1) + 
-                        Kp * (E(n) - E(n-1)) +
-                        Ki * E(n) + 
-                        Kd * (E(n) - 2E(n-1) + E(n-2))
-            */
-            val =   Control_val_YPR[i] + 
-                    PID_Kprop[i]*(YPR_diff_n[i] - YPR_diff_n1[i]);
-                    //PID_Kintegr[i]*YPR_diff_n[i] + 
-                    //PID_Kdiff[i] * (YPR_diff_n[i] - 2*YPR_diff_n1[i] + YPR_diff_n2[i]);
-            Control_val_YPR[i] = val;
-
-            // ESP_LOGI("PID", "%d: %f", i, val);
+        for(int i = 0; i < 3; i++) {
+            if(YPR_tune[i]){
+                YPR_diff_n2[i] = YPR_diff_n1[i];
+                YPR_diff_n1[i] = YPR_diff_n[i];
+                YPR_diff_n[i] = YPR_tar[i] - mpu6050.ypr[i];
+    
+                /* U(n) =   U(n-1) + 
+                            Kp * (E(n) - E(n-1)) +
+                            Ki * E(n) + 
+                            Kd * (E(n) - 2E(n-1) + E(n-2))
+                */
+                val =   Control_val_YPR[i] + 
+                        PID_tune[0] * PID_Kprop[i]    * (YPR_diff_n[i] - YPR_diff_n1[i]) + 
+                        PID_tune[1] * PID_Kintegr[i]  *  YPR_diff_n[i] + 
+                        PID_tune[2] * PID_Kdiff[i]    * (YPR_diff_n[i] - 2*YPR_diff_n1[i] + YPR_diff_n2[i]);
+                Control_val_YPR[i] = val;
+    
+                // ESP_LOGI("PID", "%d: %f", i, val);
+            }
         }
     }
 };
