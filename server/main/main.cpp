@@ -330,7 +330,7 @@ static const httpd_uri_t any = {
     .handler   = any_handler,
     /* Let's pass response string in user
      * context to demonstrate it's usage */
-    .user_ctx  = (void*) "Hello World ZZZ!"
+    .user_ctx  = (void*) "Hello World!"
 };
 
 esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
@@ -568,12 +568,10 @@ extern "C" void app_main()
      */
     #if !CONFIG_IDF_TARGET_LINUX
     #ifdef CONFIG_EXAMPLE_CONNECT_WIFI
-        printf("bebra wifi\n"); 
         ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &connect_handler, &server));
         ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &disconnect_handler, &server));
     #endif // CONFIG_EXAMPLE_CONNECT_WIFI
     #ifdef CONFIG_EXAMPLE_CONNECT_ETHERNET
-        printf("bebra ethernet\n");
         ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &connect_handler, &server));
         ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ETHERNET_EVENT_DISCONNECTED, &disconnect_handler, &server));
     #endif // CONFIG_EXAMPLE_CONNECT_ETHERNET
@@ -623,8 +621,8 @@ extern "C" void app_main()
 
     Drone.initialize_sensors();
 
-    ESP_LOGI("DRONE", "GOT IT!, waiting 5s...");
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    ESP_LOGI("DRONE", "GOT IT!, waiting 0.5s...");
+    vTaskDelay(pdMS_TO_TICKS(500));
     ESP_LOGI("DRONE", "waiting done.");
     //motors armed
 

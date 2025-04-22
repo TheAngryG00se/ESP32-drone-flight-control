@@ -13,9 +13,6 @@ static inline double bound(double val, double bottom, double top){
 }
 
 class motor{
-    public:
-        double throttle = 0;
-    
     private:
         ledc_channel_config_t ledc_motor_channel;
         int min_period;
@@ -24,6 +21,8 @@ class motor{
         uint32_t ledc_frequency;
     
     public:
+        double throttle = 0;
+
         motor(ledc_channel_t channel, int gpio_num, ledc_timer_bit_t timer_resolution, ledc_mode_t ledc_mode, uint32_t frequency, int T_min, int T_max): 
         min_period(T_min), max_period(T_max), ledc_timer_resolution(timer_resolution), ledc_frequency(frequency)
         {
@@ -40,7 +39,9 @@ class motor{
                 .flags = 0
             };
         }
-    
+
+        // double throttle() const noexcept { return throttle; }
+
         void init_motor() {
             ESP_ERROR_CHECK(ledc_channel_config(&ledc_motor_channel));
         }
@@ -59,19 +60,20 @@ class motor{
 
 static const int MOTOR_COUNT = 4;
 
-class drone{
+class drone {
     motor* motors;
     mpu6050_handler mpu6050;
     bmp280_handler bmp280;
 
     double YPR_tar[3] = {};
 
-    double YPR_diff_n[3] = {};
-    double YPR_diff_n1[3] = {};  //YPR on previous iteration
-    double YPR_diff_n2 [3] = {}; //YPR on prev-previous iteration
-
-    double PID_Kprop[3] = {2, 2, 2};
-    double PID_Kdiff[3] = {3, 3, 3};
+    double YPR_diff_n [3] = {};
+    double YPR_diff_n1[3] = {}; //YPR on previous iteration
+    double YPR_diff_n2[3] = {}; //YPR on prev-previous iteration
+    
+    //Y  P  R
+    double PID_Kprop[3] = {1, 1, 1};
+    double PID_Kdiff[3] = {2, 2, 2};
     double PID_Kintegr[3] = {0.1, 0.1, 0.1};
 
     double Control_val_YPR[3] = {};
@@ -81,6 +83,10 @@ class drone{
 public:
 
     double throttle = 0;
+
+    ~drone() {
+        delete[] motors;
+    }
 
     void initialize_motors_and_timer(
         ledc_timer_bit_t timer_resolution, ledc_mode_t timer_mode, uint32_t frequency, int min_period_ms, int max_period_ms,
@@ -177,7 +183,7 @@ public:
         //replacing iteration steps with new ones
         //getting new controlling values on Yaw (0), Pitch (1) and Roll (2)
 
-        bool YPR_tune[3] = {true, true, true};
+        bool YPR_tune[3] = {false, true, false};
         int PID_tune[3] = {1, 1, 1};
 
         double val = 0;
@@ -192,6 +198,7 @@ public:
                             Ki * E(n) + 
                             Kd * (E(n) - 2E(n-1) + E(n-2))
                 */
+
                 val =   Control_val_YPR[i] + 
                         PID_tune[0] * PID_Kprop[i]    * (YPR_diff_n[i] - YPR_diff_n1[i]) + 
                         PID_tune[1] * PID_Kintegr[i]  *  YPR_diff_n[i] + 
@@ -202,4 +209,6 @@ public:
             }
         }
     }
+
+
 };
