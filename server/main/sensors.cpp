@@ -12,14 +12,43 @@
 
 #include "sensors.hpp"
 
-void bmp280_handler::print_data(){
+void bmp280_handler::print_data() const {
     printf("pressure: %.2f, temperature: %.2f\n", pressure, temperature);
 }
 
-void bmp280_handler::read_data(){
+void bmp280_handler::read_data() {
     if (bmp280_read_float(&bmp_dev, &temperature, &pressure, &humidity) != ESP_OK) {
         printf("\n\nBMP280: Failed to read data\n\n");
     }
+}
+
+esp_err_t bmp280_handler::initialize() {
+    esp_err_t ret = ESP_OK;
+    // Инициализация BMP280
+    bmp280_params_t params;
+    bmp280_init_default_params(&params);
+    // bmp280_t bmp_dev;
+    memset(&bmp_dev, 0, sizeof(bmp280_t));
+
+    // Инициализация BMP280
+    ret = bmp280_init_desc(&bmp_dev, BMP280_I2C_ADDRESS_0, I2C_PORT, GPIO_NUM_21, GPIO_NUM_22);
+    if (ret != ESP_OK) {
+        printf("Failed to initialize BMP280: %d\n", ret);
+        vTaskDelete(NULL);
+        return ret;
+    }
+
+    ret = bmp280_init(&bmp_dev, &params);
+    if (ret != ESP_OK) {
+        printf("Failed to configure BMP280: %d\n", ret);
+        vTaskDelete(NULL);
+        return ret;
+    }
+
+    bool bme280p = (bmp_dev.id == BME280_CHIP_ID);
+    printf("BMP280: found %s\n", bme280p ? "BME280" : "BMP280");
+
+    return ESP_OK;
 }
 
 void mpu6050_handler::read_data(){
@@ -40,11 +69,22 @@ void mpu6050_handler::read_data(){
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
         // printf("MPU6050: YAW: %3.1f, PITCH: %3.1f, ROLL: %3.1f \n", ypr[0] * 180/M_PI, ypr[1] * 180/M_PI, ypr[2] * 180/M_PI);
     }
-
 }
 
-void mpu6050_handler::print_data(){
+void mpu6050_handler::print_data() const {
     printf("YAW: %3.1f, PITCH: %3.1f, ROLL: %3.1f  g: [%.2f, %.2f, %.2f]", ypr[0] * 180/M_PI, ypr[1] * 180/M_PI, ypr[2] * 180/M_PI, gravity.x, gravity.y, gravity.z);
+}
+
+esp_err_t mpu6050_handler::initialize() {
+    // Инициализация MPU6050
+    mpu.initialize();
+    mpu.dmpInitialize();
+    mpu.CalibrateAccel(6);
+    mpu.CalibrateGyro(6);
+    mpu.setDMPEnabled(true);
+    printf("MPU6050 initialized and calibrated.\n");
+
+    return ESP_OK;
 }
 
 
@@ -56,38 +96,15 @@ esp_err_t init_sensors(mpu6050_handler* mpu_handler, bmp280_handler* bmp_handler
         return ret;
     }
 
-    // Инициализация BMP280
-    bmp280_params_t params;
-    bmp280_init_default_params(&params);
-    // bmp280_t bmp_dev;
-    memset(&(bmp_handler->bmp_dev), 0, sizeof(bmp280_t));
+    ret = bmp_handler->initialize();
 
-    // Инициализация BMP280
-    ret = bmp280_init_desc(&(bmp_handler->bmp_dev), BMP280_I2C_ADDRESS_0, I2C_PORT, GPIO_NUM_21, GPIO_NUM_22);
     if (ret != ESP_OK) {
-        printf("Failed to initialize BMP280: %d\n", ret);
+        printf("Failed to initialize bmp280: %d\n", ret);
         vTaskDelete(NULL);
         return ret;
     }
 
-    ret = bmp280_init(&(bmp_handler->bmp_dev), &params);
-    if (ret != ESP_OK) {
-        printf("Failed to configure BMP280: %d\n", ret);
-        vTaskDelete(NULL);
-        return ret;
-    }
-
-    bool bme280p = (bmp_handler->bmp_dev).id == BME280_CHIP_ID;
-    printf("BMP280: found %s\n", bme280p ? "BME280" : "BMP280");
-
-
-    // Инициализация MPU6050
-    mpu_handler->mpu.initialize();
-    mpu_handler->mpu.dmpInitialize();
-    mpu_handler->mpu.CalibrateAccel(6);
-    mpu_handler->mpu.CalibrateGyro(6);
-    mpu_handler->mpu.setDMPEnabled(true);
-    printf("MPU6050 initialized and calibrated.\n");
+    mpu_handler->initialize();
 
     return ESP_OK;
 }
