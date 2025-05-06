@@ -31,6 +31,8 @@ pitch_max = 30
 roll_max = 30
 throttle_max = 100    
 
+throttle_set_verified = 0
+
 def draw(yaw: float, pitch: float, roll: float, throttle: float) -> None:
     screen.fill((0,0,0))
 
@@ -132,14 +134,18 @@ while(1):
                 case pygame.K_r:
                     throttle = 0
                     throttle_old = -1
+
+                case pygame.K_v:
+                    throttle_set_verified = 1
                 
                 case pygame.K_k:
                     with open("PID_values.txt") as f:
-                        K_prop = [float(i) for i in f.readline().split()]
-                        K_intg = [float(i) for i in f.readline().split()]
-                        K_diff = [float(i) for i in f.readline().split()]
+                        f.readline()
+                        K_prop = [float(i) for i in f.readline().split()[1:]]
+                        K_intg = [float(i) for i in f.readline().split()[1:]]
+                        K_diff = [float(i) for i in f.readline().split()[1:]]
                         
-                        print(f"sended:\nprop: {K_prop[0]} {K_prop[1]} {K_prop[2]}\nintg: {K_intg[0]} {K_intg[1]} {K_intg[2]}\ndiff: {K_diff[0]} {K_diff[1]} {K_diff[2]}")
+                        print(f"sended:\nP: {K_prop[0]} {K_prop[1]} {K_prop[2]}\nI: {K_intg[0]} {K_intg[1]} {K_intg[2]}\nD: {K_diff[0]} {K_diff[1]} {K_diff[2]}")
                         os.system(f"curl --data-binary '{K_prop[0]} {K_prop[1]} {K_prop[2]} {K_intg[0]} {K_intg[1]} {K_intg[2]} {K_diff[0]} {K_diff[1]} {K_diff[2]}' {IP}/PID")
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -177,7 +183,7 @@ while(1):
         changed = False
 
     if(changed):
-        os.system(f"curl --data-binary '{yaw} {pitch} {roll} {throttle}' {IP}/control")
+        os.system(f"curl --data-binary '{yaw} {pitch} {roll} {throttle} {throttle_set_verified}' {IP}/control")
         print("")
 
     draw(yaw, pitch, roll, throttle)

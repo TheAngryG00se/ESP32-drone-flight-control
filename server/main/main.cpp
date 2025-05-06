@@ -41,6 +41,8 @@ float TAR_OVERALL_THROTTLE = 0;
 float TAR_YAW = 0;
 float TAR_PITCH = 0;
 float TAR_ROLL = 0;
+int THROTTLE_VERIFIED = 0;
+
 
 float K_prop[3] = {};
 float K_diff[3] = {};
@@ -85,12 +87,14 @@ static esp_err_t control_post_handler(httpd_req_t *req)
         remaining -= ret;
         
         float yaw_tmp, pitch_tmp, roll_tmp, throttle_tmp;
-        if(sscanf(buf, "%f %f %f %f", &yaw_tmp, &pitch_tmp, &roll_tmp, &throttle_tmp) == 4){
+        int verification_tmp = 0;
+        if(sscanf(buf, "%f %f %f %f %d", &yaw_tmp, &pitch_tmp, &roll_tmp, &throttle_tmp, &verification_tmp) == 5){
             ESP_LOGI(TAG, "THROTTLE SET");
             TAR_OVERALL_THROTTLE = throttle_tmp;
             TAR_YAW = yaw_tmp;
             TAR_PITCH = pitch_tmp;
             TAR_ROLL = roll_tmp;
+            THROTTLE_VERIFIED = verification_tmp;
         }
 
         /* Log data received */
@@ -332,7 +336,7 @@ extern "C" void app_main()
     while (server){
         if(TAR_OVERALL_THROTTLE == 0){
             cur_overall_throttle = 0;
-            Drone.set_throttle(0);
+            Drone.force_set_throttle(0);
             Drone.update_motors();
             break;
         }
@@ -362,7 +366,7 @@ extern "C" void app_main()
             cur_tar_roll = TAR_ROLL;
             Drone.set_targets(cur_tar_yaw, cur_tar_pitch, cur_tar_roll);
         }
-        if(TAR_OVERALL_THROTTLE != cur_overall_throttle){
+        if((TAR_OVERALL_THROTTLE != cur_overall_throttle) && THROTTLE_VERIFIED){
             Drone.set_throttle(TAR_OVERALL_THROTTLE);
             cur_overall_throttle = TAR_OVERALL_THROTTLE;
         }
@@ -372,8 +376,11 @@ extern "C" void app_main()
             K_changed = false;
         }
 
-        Drone.processPID();
-        Drone.update_motors();
+        if(THROTTLE_VERIFIED) {
+            Drone.processPID();
+            Drone.update_motors();    
+        }
+        
         Drone.print_state();
         vTaskDelay(pdMS_TO_TICKS(10));
     }

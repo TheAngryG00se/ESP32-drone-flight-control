@@ -114,6 +114,10 @@ public:
     }
 
     void set_throttle(float tar_throttle){
+        throttle =  bound(tar_throttle, 2, max_throttle);
+    }
+
+    void force_set_throttle(float tar_throttle){
         throttle =  bound(tar_throttle, 0, max_throttle);
     }
 
@@ -138,18 +142,17 @@ public:
         
         */
 
-        set_duty(0, bound(throttle + Control_val_YPR[0] - Control_val_YPR[1] - Control_val_YPR[2], 0, max_throttle));
-        set_duty(1, bound(throttle - Control_val_YPR[0] - Control_val_YPR[1] + Control_val_YPR[2], 0, max_throttle));
-        set_duty(2, bound(throttle + Control_val_YPR[0] + Control_val_YPR[1] + Control_val_YPR[2], 0, max_throttle));
-        set_duty(3, bound(throttle - Control_val_YPR[0] + Control_val_YPR[1] - Control_val_YPR[2], 0, max_throttle));
+        set_duty(0, bound(throttle + Control_val_YPR[0] - Control_val_YPR[1] - Control_val_YPR[2], 2, max_throttle));
+        set_duty(1, bound(throttle - Control_val_YPR[0] - Control_val_YPR[1] + Control_val_YPR[2], 2, max_throttle));
+        set_duty(2, bound(throttle + Control_val_YPR[0] + Control_val_YPR[1] + Control_val_YPR[2], 2, max_throttle));
+        set_duty(3, bound(throttle - Control_val_YPR[0] + Control_val_YPR[1] - Control_val_YPR[2], 2, max_throttle));
     }
 
     void processPID(){
         //replacing iteration steps with new ones
         //getting new controlling values on Yaw (0), Pitch (1) and Roll (2)
 
-        bool YPR_tune[3] = {false, true, true};
-        int PID_tune[3] = {1, 1, 0};
+        bool YPR_tune[3] = {true, true, true};
 
         double val = 0;
         for(int i = 0; i < 3; i++) {
@@ -165,9 +168,9 @@ public:
                 */
 
                 val =   Control_val_YPR[i] + 
-                        PID_tune[0] * PID_Kprop[i]    * (YPR_diff_n[i] - YPR_diff_n1[i]) + 
-                        PID_tune[1] * PID_Kintg[i]  *  YPR_diff_n[i] + 
-                        PID_tune[2] * PID_Kdiff[i]    * (YPR_diff_n[i] - 2*YPR_diff_n1[i] + YPR_diff_n2[i]);
+                        PID_Kprop[i]  * (YPR_diff_n[i] - YPR_diff_n1[i]) + 
+                        PID_Kintg[i]  *  YPR_diff_n[i] + 
+                        PID_Kdiff[i]  * (YPR_diff_n[i] - 2*YPR_diff_n1[i] + YPR_diff_n2[i]);
                 Control_val_YPR[i] = val;
     
                 // ESP_LOGI("PID", "%d: %f", i, val);
