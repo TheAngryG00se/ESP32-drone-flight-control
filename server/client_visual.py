@@ -132,6 +132,15 @@ while(1):
                 case pygame.K_r:
                     throttle = 0
                     throttle_old = -1
+                
+                case pygame.K_k:
+                    with open("PID_values.txt") as f:
+                        K_prop = [float(i) for i in f.readline().split()]
+                        K_intg = [float(i) for i in f.readline().split()]
+                        K_diff = [float(i) for i in f.readline().split()]
+                        
+                        print(f"sended:\nprop: {K_prop[0]} {K_prop[1]} {K_prop[2]}\nintg: {K_intg[0]} {K_intg[1]} {K_intg[2]}\ndiff: {K_diff[0]} {K_diff[1]} {K_diff[2]}")
+                        os.system(f"curl --data-binary '{K_prop[0]} {K_prop[1]} {K_prop[2]} {K_intg[0]} {K_intg[1]} {K_intg[2]} {K_diff[0]} {K_diff[1]} {K_diff[2]}' {IP}/PID")
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             pressed = True

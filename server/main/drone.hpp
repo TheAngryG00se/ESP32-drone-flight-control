@@ -29,9 +29,9 @@ class drone {
     double YPR_diff_n2[3] = {}; //YPR diff on prev-previous iteration
     
     //Y  P  R
-    double PID_Kprop[3] = {1, 1, 1};
-    double PID_Kdiff[3] = {2, 2, 2};
-    double PID_Kintegr[3] = {0.1, 0.1, 0.1};
+    double PID_Kprop[3] = {};
+    double PID_Kdiff[3] = {};
+    double PID_Kintg[3] = {};
 
     double Control_val_YPR[3] = {};
 
@@ -95,12 +95,15 @@ public:
 
     void print_state(){
         printf("\033[0H\033[0J");
-        printf("T_YAW: %3.1f, T_PITCH: %3.1f, T_ROLL: %3.1f \nYAW:   %3.1f, PITCH:   %3.1f, ROLL:   %3.1f \ng: [%.2f, %.2f, %.2f] \npressure: %.2f, temperature: %.2f\nPID: %.3f, %.3f, %.3f\n %.2f %.2f %.2f %.2f\n", 
+        printf("T_YAW: %3.1f, T_PITCH: %3.1f, T_ROLL: %3.1f \nYAW:   %3.1f, PITCH:   %3.1f, ROLL:   %3.1f \ng: [%.2f, %.2f, %.2f] \npressure: %.2f, temperature: %.2f\nPID: %.3f, %.3f, %.3f\n %.2f %.2f %.2f %.2f\ncoeffs:\nP: %.3lf %.3lf %.3lf\nI: %.3lf %.3lf %.3lf\nD: %.3lf %.3lf %.3lf\n", 
                 YPR_tar[0], YPR_tar[1], YPR_tar[2],
                 mpu6050.ypr[0] * 180/M_PI, mpu6050.ypr[1] * 180/M_PI, mpu6050.ypr[2] * 180/M_PI, mpu6050.gravity.x, mpu6050.gravity.y, mpu6050.gravity.z, 
                 bmp280.pressure, bmp280.temperature, 
                 Control_val_YPR[0], Control_val_YPR[1], Control_val_YPR[2],
-                motors[0].throttle(),  motors[1].throttle(),  motors[2].throttle(),  motors[3].throttle()
+                motors[0].throttle(),  motors[1].throttle(),  motors[2].throttle(),  motors[3].throttle(),
+                PID_Kprop[0], PID_Kprop[1], PID_Kprop[2],
+                PID_Kintg[0], PID_Kintg[1], PID_Kintg[2],
+                PID_Kdiff[0], PID_Kdiff[1], PID_Kdiff[2]
             );
     }
 
@@ -114,6 +117,14 @@ public:
         throttle =  bound(tar_throttle, 0, max_throttle);
     }
 
+    void set_PID(float PID_Kprop_new[3], float PID_Kintg_new[3], float PID_Kdiff_new[3]){
+        for(int i = 0; i < 3; ++i){
+            PID_Kprop[i] = PID_Kprop_new[i];
+            PID_Kdiff[i] = PID_Kdiff_new[i];
+            PID_Kintg[i] = PID_Kintg_new[i];
+        }
+    }
+
     void update_motors(){
         /*
 
@@ -125,7 +136,7 @@ public:
         3   2
           -P
         
-          */
+        */
 
         set_duty(0, bound(throttle + Control_val_YPR[0] - Control_val_YPR[1] - Control_val_YPR[2], 0, max_throttle));
         set_duty(1, bound(throttle - Control_val_YPR[0] - Control_val_YPR[1] + Control_val_YPR[2], 0, max_throttle));
@@ -137,8 +148,8 @@ public:
         //replacing iteration steps with new ones
         //getting new controlling values on Yaw (0), Pitch (1) and Roll (2)
 
-        bool YPR_tune[3] = {true, true, true};
-        int PID_tune[3] = {1, 1, 1};
+        bool YPR_tune[3] = {false, true, true};
+        int PID_tune[3] = {1, 1, 0};
 
         double val = 0;
         for(int i = 0; i < 3; i++) {
@@ -155,7 +166,7 @@ public:
 
                 val =   Control_val_YPR[i] + 
                         PID_tune[0] * PID_Kprop[i]    * (YPR_diff_n[i] - YPR_diff_n1[i]) + 
-                        PID_tune[1] * PID_Kintegr[i]  *  YPR_diff_n[i] + 
+                        PID_tune[1] * PID_Kintg[i]  *  YPR_diff_n[i] + 
                         PID_tune[2] * PID_Kdiff[i]    * (YPR_diff_n[i] - 2*YPR_diff_n1[i] + YPR_diff_n2[i]);
                 Control_val_YPR[i] = val;
     

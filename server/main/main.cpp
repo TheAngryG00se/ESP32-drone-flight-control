@@ -42,6 +42,11 @@ float TAR_YAW = 0;
 float TAR_PITCH = 0;
 float TAR_ROLL = 0;
 
+float K_prop[3] = {};
+float K_diff[3] = {};
+float K_intg[3] = {};
+bool K_changed = false;
+
 esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
 {
     if (strcmp("/hello", req->uri) == 0) {
@@ -58,7 +63,7 @@ esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
     return ESP_FAIL;
 }
 
-/* my custom handler */
+/* my custom handlers */
 static esp_err_t control_post_handler(httpd_req_t *req)
 {
     char buf[100];
@@ -101,10 +106,65 @@ static esp_err_t control_post_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static const httpd_uri_t control = {
+static const httpd_uri_t control_URI_handler = {
     .uri       = "/control",
     .method    = HTTP_POST,
     .handler   = control_post_handler,
+    .user_ctx  = NULL
+};
+
+/* my custom handlers */
+static esp_err_t PID_post_handler(httpd_req_t *req)
+{
+    char buf[100];
+    int ret, remaining = req->content_len;
+
+    while (remaining > 0) {
+        /* Read the data for the request */
+        if ((ret = httpd_req_recv(req, buf,
+                        MIN(remaining, sizeof(buf)))) <= 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+                /* Retry receiving if timeout occurred */
+                continue;
+            }
+            return ESP_FAIL;
+        }
+
+        /* Send back the same data */
+        httpd_resp_send_chunk(req, buf, ret);
+        remaining -= ret;
+        
+        
+        if(sscanf(buf, "%f %f %f %f %f %f %f %f %f", 
+                                                    &K_prop[0], &K_prop[1], &K_prop[2], 
+                                                    &K_intg[0], &K_intg[1], &K_intg[2],
+                                                    &K_diff[0], &K_diff[1], &K_diff[2]) == 9){
+            ESP_LOGI(TAG, "GOT NEW COEFFS");
+            K_changed = true;
+        }
+        else {
+            ESP_LOGE(TAG, "Invalid data in sscanf read");
+        }
+
+        /* Log data received */
+        ESP_LOGI(TAG, "=========== RECEIVED DATA ==========");
+        ESP_LOGI(TAG, "K_prop: %f %f %f", K_prop[0], K_prop[1], K_prop[2]);
+        ESP_LOGI(TAG, "K_intg: %f %f %f", K_intg[0], K_intg[1], K_intg[2]);
+        ESP_LOGI(TAG, "K_diff: %f %f %f", K_diff[0], K_diff[1], K_diff[2]);
+
+        ESP_LOGI(TAG, "%.*s", ret, buf);
+        ESP_LOGI(TAG, "====================================");
+    }
+
+    // End response
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+static const httpd_uri_t PID_URI_handler = {
+    .uri       = "/PID",
+    .method    = HTTP_POST,
+    .handler   = PID_post_handler,
     .user_ctx  = NULL
 };
 
@@ -126,7 +186,8 @@ static httpd_handle_t start_webserver(void)
     if (httpd_start(&server, &config) == ESP_OK) {
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
-        httpd_register_uri_handler(server, &control);
+        httpd_register_uri_handler(server, &control_URI_handler);
+        httpd_register_uri_handler(server, &PID_URI_handler);
         #if CONFIG_EXAMPLE_BASIC_AUTH
         httpd_register_basic_auth(server);
         #endif
@@ -257,6 +318,16 @@ extern "C" void app_main()
     vTaskDelay(pdMS_TO_TICKS(500));
     //arming motors
 
+    ESP_LOGI("DRONE",  "waiting for coeffs...");
+    while (server){
+        if(K_changed) {
+            Drone.set_PID(K_prop, K_intg, K_diff);
+            K_changed = false;
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
     ESP_LOGI("DRONE",  "waiting for arming zero...");
     while (server){
         if(TAR_OVERALL_THROTTLE == 0){
@@ -274,7 +345,6 @@ extern "C" void app_main()
     vTaskDelay(pdMS_TO_TICKS(500));
     ESP_LOGI("DRONE", "waiting done.");
     //motors armed
-
 
     float cur_tar_yaw = TAR_YAW;
     float cur_tar_pitch = TAR_PITCH;
@@ -297,7 +367,12 @@ extern "C" void app_main()
             cur_overall_throttle = TAR_OVERALL_THROTTLE;
         }
 
-        // Drone.processPID();
+        if(K_changed){
+            Drone.set_PID(K_prop, K_intg, K_diff);
+            K_changed = false;
+        }
+
+        Drone.processPID();
         Drone.update_motors();
         Drone.print_state();
         vTaskDelay(pdMS_TO_TICKS(10));
